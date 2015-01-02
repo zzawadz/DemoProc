@@ -54,13 +54,18 @@ feminisation(popPyr,total = FALSE)
 
 # przerobienie piramid dla kazdego roku
 allPyr = lapply(shortStruct, rangesStrct2PopulationPyramid)
+
+# obliczanie statystyk dla kazdego roku
 sapply(allPyr, feminisation)
 sapply(allPyr, burden)
 sapply(allPyr, burden, type = "lower")
 sapply(allPyr, burden, type = "upper")
 
-sapply(allPyr, plot_pyramid, xlim = c(-4000,4000))
+# rysowanie priamid o tych samych granicach
+sapply(allPyr, plot_pyramid, xlim = c(-4000,4000)) 
 
+#inne:
+# zmiana struktury wieku dla kobiet na przestrzeni lat - widac starzenie sie spoleczenstwa:
 nyears = length(allPyr)
 library(colorspace)
 colors = heat_hcl(nyears)
