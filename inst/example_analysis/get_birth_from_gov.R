@@ -46,6 +46,4 @@ extract_province = function(dtAll, province = "tatrza")
 }
 
 
-extract_province(dtAll)
-
 

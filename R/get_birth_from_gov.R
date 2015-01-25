@@ -84,7 +84,7 @@ extract_birth_province = function(dtAll, province = "tatrza")
 #' @title extract death
 #' @export
 #' 
-extract_death_province = function(dtAll, province = "tatrza")
+extract_death_province = function(dtAll, province = "tatrza", zero = FALSE)
 {
   dtNames = dtAll[[1]] %>% as.character
   pos = grep(dtNames, pattern = province)
@@ -96,6 +96,17 @@ extract_death_province = function(dtAll, province = "tatrza")
   names = gsub(names, pattern = " ", replacement = "")[-1]
   names[c(1,2,20)] = c("Total","0","85+")
   names(dt) = names
+  
+  #dt = femaleDeath
+  if(!zero)
+  {
+    names2 = names(dt)[-2]
+    names2[2] = "0-4"
+    dt[3] = dt[3] + dt[2]
+    dt = dt[-2]
+    names(dt) = names2
+  }
+  
   dt
 }
 

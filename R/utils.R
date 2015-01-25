@@ -74,3 +74,39 @@ get_pyramid_from_data = function(data, col = 1, year = 2009)
   
   vector2PopulationPyramid(ages, males, females)
 }
+
+
+
+#other
+
+#' @title extract province from popStructLesserPolandSomeProvinces
+#' @export
+extract_province_from_popStructLesserPolandSomeProvinces = function(data, province)
+{
+  data = data[, c(1:3,grep(colnames(data), pattern = province))]
+  
+  colnames(data)[4] = "Size"
+  
+  tmp = data %>% group_by(Year,Sex) %>% do(size = (function(x) {
+    xx = x[,c("Age","Size")]
+    colnames(xx)[2] = x$Sex[1]
+    xx
+  })(.))
+  
+  tmp2 = tmp %>% group_by(Year) %>% do(Year2 = (function(x)
+  {
+    xx = merge(x$size[[2]], x$size[[1]])
+    
+    tmp = xx[10,]
+    xx[3:10,] = xx[2:9,]
+    xx[2,] = tmp
+    xx
+    
+  })(.))
+  
+  x = tmp
+  data = tmp2$Year2
+  names(data) = tmp2$Year
+  data
+  
+}
