@@ -1,0 +1,246 @@
+---
+title: "Umieralnosc"
+output: word_document
+---
+
+```{r, warning=FALSE}
+library(DemoProc)
+library(colorspace)
+library(knitr)
+library(RColorBrewer)
+library(Cairo)
+
+
+source.with.encoding = function (path, encoding, echo = getOption("verbose"), print.eval = echo,  max.deparse.length = 150, chdir = FALSE) 
+{
+    con = file(path, open = "r", encoding = encoding)
+    on.exit(close(con))
+    source(con, echo = echo, print.eval = print.eval, max.deparse.length = max.deparse.length, 
+        chdir = chdir)
+}
+
+source.with.encoding("death.R", encoding='UTF-8')
+
+pathToPlots = "Obrazki"
+
+CairoPNG(filename = file.path(pathToPlots,paste0("UmieralnoscKobiet",".png")), width = 800, height = 600, pointsize = 14)
+plot_death(deathByYearFemale, deathFemaleForecast)
+title("Umieralność kobiet w kolejnych latach")
+dev.off()
+
+CairoPNG(filename = file.path(pathToPlots,paste0("UmieralnoscMezczyzn",".png")), width = 800, height = 600, pointsize = 14)
+plot_death(deathByYearMale, deathMaleForecast)
+title("Umieralność mężczyzn w kolejnych latach")
+dev.off()
+
+```
+
+### Współczynnik płodności
+```{r, warning=FALSE}
+province = "tatrz"
+data(popStructLesserPolandSomeProvinces)
+
+######### Struktury ludnosci dla poszczegolnych lat
+popStructYears = extract_province_from_popStructLesserPolandSomeProvinces(popStructLesserPolandSomeProvinces, province = province)
+
+data(birthAllList) #pobranie listy z urodzeniami dla kazdego roku:
+provBirth = lapply(birthAllList, extract_birth_province, province = province)
+liveBirth = sapply(provBirth, function(x) x[2,-1])
+
+######### Dzietnosc co roku - dane orginalne
+fertilityByYear = NULL
+
+for(year in colnames(liveBirth))
+{
+  births = liveBirth[,year] %>% unlist
+  structPop = popStructYears[[year]] 
+  fertilityRate = get_fertility_rate(structPop, births) # wspolczynniki urodzen
+  fertilityByYear = cbind(fertilityByYear, fertilityRate) 
+}
+colnames(fertilityByYear) = colnames(liveBirth)
+kable(fertilityByYear %>% round(4))
+
+```
+
+### Prognozowanie dzietności
+```{r, warning=FALSE}
+CairoPNG(filename = file.path(pathToPlots,paste0("dzietnosc",".png")), width = 800, height = 600, pointsize = 14)
+library(RColorBrewer)
+colors = brewer.pal(nrow(fertilityByYear),"Paired")
+fertilityByYear %>% t %>% matplot(type= "l", col = colors, lty = 1, lwd = 2, xlim = c(1,ncol(fertilityByYear)+7), xaxt = "n")
+#fitowanie modeli
+
+
+t = 1:ncol(fertilityByYear)
+fitList = list()
+fertForecast = NULL
+for(i in 1:nrow(fertilityByYear))
+{
+  y = fertilityByYear[i,]
+  fit = lm(y~t)
+  fitList[[i]] =  fit
+  abline(fit, col = colors[i], lty = 2, lwd = 2)
+  
+  fertForecast = rbind(fertForecast,sapply(13:19, function(i) predict(fit, data.frame(t = i))))
+}
+rownames(fertForecast) = rownames(fertilityByYear)
+colnames(fertForecast) = c(2014:2020)
+fertilityByYearAll = cbind(fertilityByYear, fertForecast)
+legend("topleft",colnames(fertilityByYear%>%t), col = colors, lwd = 2, lty = 1)
+
+t = sapply(1:ncol(fertForecast), function(i) { points(rep(ncol(fertilityByYear)+i,nrow(fertForecast)),fertForecast[,i], pch = 19, cex = 1.5, col = colors)})
+axis(1, at = 1:19, 2002:2020)
+title("Współczynniki dzietności")
+dev.off()
+# Prognozowane wartosci - tabelka:
+kable(fertForecast %>% round(4))
+```
+
+
+### Ogólny współczynnik dzietności
+```{r, warning=FALSE}
+# Ogolny wspolczynnik dzietnosci
+fertilityTotal = apply(fertilityByYearAll,2, function(x) sum(x)*5)
+CairoPNG(filename = file.path(pathToPlots,paste0("FertilityTotal",".png")), width = 800, height = 600, pointsize = 14)
+plot(names(fertilityTotal) %>% as.numeric,fertilityTotal, xlab = "Czas", pch = 19, col = c(rep(colors[2],12), rep(colors[6],7)))
+legend("bottomright", c("Wartość rzeczywista", "Prognoza"), col = colors[c(2,6)], pch = 19)
+dev.off()
+fertTotal = fertilityTotal %>% matrix %>% t
+colnames(fertTotal) = names(fertilityTotal)
+kable(fertTotal %>% round(4)) 
+
+
+library("colorspace")
+colors = heat_hcl(ncol(fertilityByYear))
+CairoPNG(filename = file.path(pathToPlots,paste0("fertilityByYear",".png")), width = 800, height = 600, pointsize = 14)
+fertilityByYear %>% matplot(type= "l",lwd = 2, col = (colors), lty = 1, xaxt = "n")
+
+colors = brewer.pal(9, "Blues") %>% tail(ncol(fertForecast))
+a = lapply(1:ncol(fertForecast), function(i) lines(fertForecast[,i], col = colors[i], lty = 2, lwd = 2))
+
+legend("topright",colnames(fertilityByYearAll), col = c(heat_hcl(ncol(fertilityByYear)), colors), lwd = 2, lty = 1, ncol = 2)
+axis(1,at = 1:nrow(fertilityByYearAll), rownames(fertilityByYearAll))
+title("Współczynniki dzietności dla grup wiekowych")
+dev.off()
+```
+
+### Średni wiek kobiet w chwili rodzenia dzieci
+```{r}
+motherYear = rownames(fertilityByYearAll)
+motherYear
+tmp = seq(12,57,5)*fertilityByYearAll
+
+for(i in 1:ncol(tmp)) tmp[,i] = tmp[,i]/(fertTotal[i]/5)
+motherAge = colSums(tmp) %>% as.matrix 
+colnames(motherAge) = "Średni wiek rodzenia dzieci"
+plot(names(fertilityTotal) %>% as.numeric,motherAge, xlab = "Czas", pch = 19, col = c(rep(colors[2],12), rep(colors[6],7)))
+legend("bottomright", c("Wartość rzeczywista", "Prognoza"), col = colors[c(2,6)], pch = 19)
+title("Średni wiek matki w chwili rodzenia dziecka")
+kable(motherAge)
+```
+
+### Prognoza liczby ludności
+
+```{r}
+# Rok startowy 2010
+structPop = popStructYears[["2010"]]
+fmDeath = femaleDeath[,"2010"]
+mlDeath = maleDeath[,"2010"]
+fertilityRate = fertilityByYearAll[,"2010"]
+
+deathRate = extract_death_rate_merge(deathMaleAll, deathFemaleAll, year = "2010")
+forecast = forecast_population(structPop, fertilityRate, get_BigL(deathRate))
+
+deathRate = extract_death_rate_merge(deathMaleAll, deathFemaleAll, year = "2015")
+forecast2020 = forecast_population(forecast, fertilityRate, get_BigL(deathRate))
+
+popStructYearsAll = popStructYears
+for(i in 14:19) popStructYearsAll[[i]] = forecast
+popStructYearsAll[[20]] = forecast2020
+names(popStructYearsAll) = 2001:2020
+```
+
+### Piramidy wieku
+```{r}
+structPop %>% rangesStrct2PopulationPyramid %>% plot_pyramid
+title("2010")
+
+forecast %>% rangesStrct2PopulationPyramid %>% plot_pyramid
+title("2015")
+
+forecast2020 %>% rangesStrct2PopulationPyramid %>% plot_pyramid
+title("2020")
+```
+
+### Współczynnik przyrostu naturalnego
+```{r}
+get_deathCoeaf_and_natGrow = function(year)
+{
+pp = popStructYearsAll[[year]]
+deaths = sum(pp$Male * deathMaleAll[,year]) + sum(pp$Female * deathFemaleAll[,year])
+totPop = pp[,2:3] %>% rowSums %>% sum
+
+deathCoef = deaths/totPop * 1000
+natGrow = (sum(pp[3:12,"Female"] * fertilityByYearAll[,year]) - deaths)/totPop*1000
+c(deathCoef = deathCoef, natGrow = natGrow)
+}
+
+statsPop = sapply(2005:2020 %>% as.character, get_deathCoeaf_and_natGrow) %>% t
+
+# ogolny wspolczynnik zgonow + wspolczynnik przyrostu naturalnego
+kable(statsPop %>% round(4))
+
+colors = brewer.pal(3, "Set1")
+plot(2005:2020,2005:2020, ylim =  extendrange(statsPop[,1]), xlab = "", ylab = "")
+points(2005:2013, statsPop[1:9,1], pch = 19, col = colors[1])
+points(c(2015,2020), statsPop[c("2015","2020"),1], pch = 19, col = colors[2])
+legend("bottomright", c("Wartość rzeczywista", "Prognoza"), col = colors[c(1,2)], pch = 19)
+title("Ogólny współczynnik zgonów")
+
+
+colors = brewer.pal(3, "Set1")
+plot(2005:2020,2005:2020, ylim =  extendrange(statsPop[,2]), xlab = "", ylab = "")
+points(2005:2013, statsPop[1:9,2], pch = 19, col = colors[1])
+points(c(2015,2020), statsPop[c("2015","2020"),2], pch = 19, col = colors[2])
+legend("topright", c("Wartość rzeczywista", "Prognoza"), col = colors[c(1,2)], pch = 19)
+title("Współczynnik przyrostu naturalnego")
+
+```
+
+### Oczekiwane dalsze trwanie życia
+
+```{r}
+
+extract_expected_life = function(year)
+{
+  deathRate = extract_death_rate_merge(deathMaleAll, deathFemaleAll, year = year) 
+  bigL = deathRate %>% get_BigL
+  smallL = deathRate %>% get_SmallL
+  
+  bigT = apply(bigL,2, . %>% rev %>% cumsum %>% rev)
+  bigT/smallL
+}
+
+expectedLifeAll = lapply(2005:2020 %>% as.character, extract_expected_life)
+expLifeZero = expectedLifeAll %>% sapply(function(x) x[1,]) %>% t
+rownames(expLifeZero) = 2005:2020
+
+kable(expLifeZero %>% round(2))
+
+
+colors = brewer.pal(3, "Set1")
+plot(2005:2020,2005:2020, ylim =  extendrange(expLifeZero[,1]), xlab = "", ylab = "")
+points(2005:2013, expLifeZero[1:9,1], pch = 19, col = colors[1])
+points(c(2015,2020), expLifeZero[c("2015","2020"),1], pch = 19, col = colors[2])
+legend("bottomright", c("Wartość rzeczywista", "Prognoza"), col = colors[c(1,2)], pch = 19)
+title("Oczekiwana dalsza dlugość życia - mężczyźni")
+
+colors = brewer.pal(3, "Set1")
+plot(2005:2020,2005:2020, ylim =  extendrange(expLifeZero[,2]), xlab = "", ylab = "")
+points(2005:2013, expLifeZero[1:9,2], pch = 19, col = colors[1])
+points(c(2015,2020), expLifeZero[c("2015","2020"),2], pch = 19, col = colors[2])
+legend("bottomright", c("Wartość rzeczywista", "Prognoza"), col = colors[c(1,2)], pch = 19)
+title("Oczekiwana dalsza dlugość życia - kobiety")
+
+```
+

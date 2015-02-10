@@ -116,6 +116,23 @@ get_BigL = function(deathRate, zero = FALSE)
   bigL
 }
 
+#' @title Title
+#' @export
+get_SmallL = function(deathRate, zero = FALSE)
+{
+  a = get_A(deathRate)[,2:3] %>% as.matrix
+  q = get_death_prob(deathRate, h = 5)
+  h = rep(5, nrow(q)); 
+  if(zero) h[1:2] = c(1,4); # gdyby zerolatki zostaly wlaczone
+  h = cbind(h,h)
+  mul = h*(1-(1-a)*q)
+  
+  l = matrix(1e5, ncol = 2, nrow = nrow(q))
+  for(i in 2:nrow(l)) l[i,] = l[i-1,] * (1-q[i-1,])
+  l
+}
+
+
 #' @title get ageing coeff
 #' @export
 get_ageing_coeff = function(bigL)
